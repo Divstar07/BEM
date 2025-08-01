@@ -24,7 +24,7 @@ Katana is a simple BEM code inspired by BYU CCBlade
 
 - Currently Katana only works for wind turbines
 
-- Katana can perform analysis of flow conditions where the incoming velocity is > 0, and when the turbine rotational velocity (and thus tip speed ratio) are > 0. No inflow angles less than 0 degrees can be resolved by this code.
+- Katana can perform analysis of flow conditions where the incoming velocity is > 0, and when the turbine rotational velocity (and thus tip speed ratio) is > 0. No inflow angles less than 0 degrees can be resolved by this code.
 
 - Currently there is no provision for turbine precone angles
 
