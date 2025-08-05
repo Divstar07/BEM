@@ -260,8 +260,8 @@ phimin = 0; phimax = pi/2;
 if success
     phistar = fzero(@(phi)residual(phi), [phiL, phiU]);
 else
-    disp("Failed to find bracket for brent's");
-    phistar = fzero(@(phi)residual(phi), 0);
+    disp("First bracket failed, changing initial condition for brent's to pi/2");
+    phistar = fzero(@(phi)residual(phi), pi/2);
 end
 
 residual(phistar) % test phistar by evaluating R at phistar
