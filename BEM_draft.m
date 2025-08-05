@@ -12,31 +12,35 @@ clc, clearvars
 rhoAir = 1.184; % At 25C
 muAir = 0.00001837; % At 25C
 
-% Define rotor geometry
+% Define rotor parameters
 % arguments:
 % - Rhub:
 % - Rtip (for F, need to find physical description)
 % - B: Number of blades
-% - tip_pitch: Pitch angle of blade tip
+% - reCorr: Whether to apply Re correction
+% - rotCorr: Whether to apply rotational correction
 
-function rotor = initRotor(Rhub, Rtip, B, tipPitch)
+function rotor = initRotor(Rhub, Rtip, B, tipPitch, reCorr, rotCorr)
 rotor.Rhub = Rhub;
 rotor.Rtip = Rtip;
 rotor.B = B;
-rotor.tipPitch = tipPitch;
+rotor.reCorr = reCorr;
+rotor.rotCorr = rotCorr;
 end
 
 % Define rotor section geometry
 % Arguments:
 % - r: Radius at each station
 % - c: Chord " " "
-% - twist: Twist " " "
-% - af: Airfoil " " "
-function section = initSection(r, c, twist, af)
+% - theta: Pitch angle " " "
+% - af: File name of txt file containing airfoil data
+% - Re: Reynolds number for provided airfoil data (for Re corrections)
+function section = initSection(r, c, theta, af, Re)
 section.r = r;
 section.c = c;
-section.twist = twist;
+section.theta = theta;
 section.af = af;
+section.Re = Re;
 end
 
 % Initialize a station based on location on blade section
@@ -47,7 +51,7 @@ end
 function station = initStation(section, n)
 station.r = section.r(n);
 station.c = section.c(n);
-station.twist = section.twist(n);
+station.theta = section.theta(n);
 station.af = section.af(n);
 end
 
@@ -140,7 +144,7 @@ cphi = cos(phi);
 V = (op.tsr*op.Uinf);
 
 % Determine alpha
-alpha = phi - (station.twist + rotor.tipPitch);
+alpha = phi - (station.theta);
 
 % Compute Re(neglecting induction)
 Urel = sqrt((op.Uinf)^2 + (V)^2);
@@ -255,14 +259,18 @@ phimin = 0; phimax = pi/2;
 % success)
 if success
     phistar = fzero(@(phi)residual(phi), [phiL, phiU]);
+else
+    disp("Failed to find bracket for brent's");
+    phistar = fzero(@(phi)residual(phi), 0);
 end
 
-% residual(phistar) % test phistar by evaluating R at phistar
+residual(phistar) % test phistar by evaluating R at phistar
 
 % Find correct outputs with phistar
 [~, outputs] = residualAndOutputs(phistar, rotor, station, op);
 
 end
+
 
 % function nondim: Non-dminesionalise inputs and return coefficients
 % Arguments:
@@ -305,6 +313,8 @@ Tp = zeros(1, length(section.r)); Qp = zeros(1, length(section.r));
 
 % Compute Tp and Qp for all blade stations
 for i = 1:length(section.r)
+    msg = ['iter = ', num2str(i)];
+    disp(msg);
     Tp(i) = solveStation(rotor, initStation(section, i), op, npts).Tp;
     Qp(i) = solveStation(rotor, initStation(section, i), op, npts).Qp;
 end
@@ -332,7 +342,7 @@ end
 % - op: Operating condition
 % Returns:
 % - [Cpmax, tsr1, Ct1, Cq1]: Max power coefficient (other results reported
-%                         at corresponding tsr)
+%                            at corresponding tsr)
 % - [Ctmax, tsr2, Cp2, Cq2]: Max Ct '' '' ''
 % - [Cqmax, tsr3, Cp3, Ct3]: Max Cq '' '' ''
 
@@ -348,6 +358,8 @@ Cq = zeros(1, length(tsrVec));
 
 % solveRotor for all tsr in tsrVec
 for i = 1:length(tsrVec)
+    msg = ['tsrVec = ', num2str(tsrVec(i))];
+    disp(msg);
     opCurr = initOp(op.Uinf, op.rho, op.mu, op.tsrL, op.tsrU, tsrVec(i));
     [Ct(i), Cq(i), Cp(i)] = solveRotor(rotor, section, opCurr);
 end
@@ -379,24 +391,31 @@ tsr_q = tsrVec(nq); Cp_q = Cq(nq); Ct_q = Ct(nq);
 
 end
 
-% % rotor params
-% Rhub = 1.5; Rtip = 21; B = 3;
-% testRotor = initRotor(Rhub, Rtip, B, deg2rad(0));
-% 
-% % section params
-% r = [2.8667, 5.6000, 8.3333, 11.7500, 15.8500, 19.9500];
-% c = [3.542, 3.854, 4.167, 4.557, 4.652, 4.458];
-% twist = deg2rad([13.308, 13.308, 13.308, 13.308, 11.480, 10.162]);
-% af = ["NACA 4412", "NACA 4412", "NACA 4412", "NACA 4412", "NACA 4412", "NACA 4412"];
-% 
-% testSection = initSection(r, c, twist, af);
-% 
-% % op params
-% Uinf = 10; tsrL = 1; tsrU = 8; tsr = 7.55;
-% op = initOp(Uinf, rhoAir, muAir, tsrL, tsrU, tsr);
-% 
-% % Max conditions for all coefficients
-% CpMaxCondition = zeros(1, 4); CtMaxCondition = zeros(1,4); CqMaxCondition = zeros(1,4);
-% 
-% [CpMaxCondition(1), CpMaxCondition(2), CpMaxCondition(3), CpMaxCondition(4), CtMaxCondition(1), CtMaxCondition(2), CtMaxCondition(3), CtMaxCondition(4), CqMaxCondition(1), CqMaxCondition(2), CqMaxCondition(3), CqMaxCondition(4)] = performancePlot(testRotor, testSection, op);
-% CpMaxCondition, CtMaxCondition, CqMaxCondition
+% [~,~] = textAf(-5.3, 'xf-naca4415-il-50000.txt');
+
+% rotor params
+Rhub = 1.5; Rtip = 63; B = 3;
+testRotor = initRotor(Rhub, Rtip, B, deg2rad(0), 'none', 'none');
+
+% section params
+r = [2.8667, 5.6000, 8.3333, 11.7500, 15.8500, 19.9500, 24.0500, 28.1500, 32.2500, 36.3500, 40.4500, 44.5500, 48.6500, 52.7500, 56.1667, 58.9000, 61.6333];
+chord = [3.542, 3.854, 4.167, 4.557, 4.652, 4.458, 4.249, 4.007, 3.748, 3.502, 3.256, 3.010, 2.764, 2.518, 2.313, 2.086, 1.419];
+theta = deg2rad([13.308, 13.308, 13.308, 13.308, 11.480, 10.162, 9.011, 7.795, 6.544, 5.361, 4.188, 3.125, 2.319, 1.526, 0.863, 0.370, 0.106]);
+
+afData = ["data/Cylinder1.dat", "data/Cylinder2.dat", "data/DU40_A17.dat", "data/DU35_A17.dat", "data/DU30_A17.dat", "data/DU25_A17.dat", "data/DU21_A17.dat", "data/NACA64_A17.dat"];
+afIndex = [1, 1, 2, 3, 4, 4, 5, 6, 6, 7, 7, 8, 8, 8, 8, 8, 8];
+airfoils = afData(afIndex);
+
+testSection = initSection(r, chord, theta, airfoils, 50000);
+
+% op params
+Uinf = 10; tsrL = 2; tsrU = 15; tsr = [];
+op = initOp(Uinf, rhoAir, muAir, tsrL, tsrU, tsr);
+
+% [Ct, Cq, Cp] = solveRotor(testRotor, testSection, op)
+
+% Max conditions for all coefficients
+CpMaxCondition = zeros(1, 4); CtMaxCondition = zeros(1,4); CqMaxCondition = zeros(1,4);
+
+[CpMaxCondition(1), CpMaxCondition(2), CpMaxCondition(3), CpMaxCondition(4), CtMaxCondition(1), CtMaxCondition(2), CtMaxCondition(3), CtMaxCondition(4), CqMaxCondition(1), CqMaxCondition(2), CqMaxCondition(3), CqMaxCondition(4)] = performancePlot(testRotor, testSection, op);
+CpMaxCondition, CtMaxCondition, CqMaxCondition
